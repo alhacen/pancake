@@ -40,50 +40,62 @@ class Realm{
             }
         })
     }
+    _resolvePointer = (pointersIdArray) =>{
+        
+        return  pointersIdArray.map(pointersId=>{
+            let newSelfObj={}
+            let pointersCollection = this.idToCollectionMap.get(pointersId)
+            if(!pointersId)
+                return pointersId
+            this._resolveProps(newSelfObj, pointersCollection, pointersId)
+            return newSelfObj
+        })
+    }
+    _resolvePropsHelper = (id, key) =>{
+        let pointersId,newSelfObj, pointersCollection, pointersIdArray, res
+        if(this.map.has(key)){                    
+            switch(this.keyToTypeMap.get(key)){
+                case 'string':
+                case 'array':
+                    return this.map.get(key).get(id)
+                    break;
+                case '*':
+                case '*array':
+                    pointersIdArray = this.map.get(key).get(id)
+                    if(!Array.isArray(pointersIdArray))
+                        return this._resolvePointer([pointersIdArray])[0]
+                    else 
+                        return this._resolvePointer(pointersIdArray)
+                    
+                    break;
+            }
+        }
+    }
+    _resolveProps = (selfObj, collection,id, key) =>{
+
+        if(!key)
+            key = collection
+        let props = this.keyToPropMap.get(key)
+        props.map(prop=>{
+            selfObj[prop] = () =>{
+                return this._resolvePropsHelper(id, key+"To"+prop)
+            }
+        })
+
+    }
     collection = (collection) =>{
         let self ={}
         self.collection = collection
         
-        self.create = (payload) =>{
-            let newUUID = this.newUUID()
-            let map
-            this.idToCollectionMap.set(newUUID, self.collection)
-
-            Object.keys(payload).forEach(payloadkey=>{
-                switch(this.keyToTypeMap.get(`${self.collection}To${payloadkey}`)){
-                    case 'string':                        
-                    case '*':
-                        map = this.map.get(`${self.collection}To${payloadkey}`)
-                        map.set(newUUID, payload[payloadkey])
-                        break;
-                    case 'array':
-                    case '*array':
-                        map = this.map.get(`${self.collection}To${payloadkey}`)
-                        map.set(newUUID, [])
-                        map = map.get(newUUID)
-                        payload[payloadkey].forEach(data=>{
-                            map.push(data)
-                        })
-                        break;
-                    case 'object':
-                        Object.keys(payload[payloadkey]).forEach(_=>{
-                            map = this.map.get(`${self.collection}To${payloadkey}To${_}`)
-                            map.set(newUUID, payload[payloadkey][_])
-                        })
-                        break;
-
-                }
-            })
-            return newUUID
-        }
-        
         self.id = (id) =>{
             let self2 = {}
+            this._resolveProps(self2, collection, id)
             let res;
             self2.id = id
             
             self2.select = (key, self3)=>{
                 let res;
+                
                 if(!self3)
                     self3 = {}
                 if(!self3.collection)
@@ -94,6 +106,7 @@ class Realm{
                     self3.key = self3.key+'To'+key
                 else
                     self3.key = self3.collection+'To'+key
+
                 if(this.map.has(self3.key)){
                     
                     switch(this.keyToTypeMap.get(self3.key)){
@@ -155,6 +168,38 @@ class Realm{
             return self2
         }
 
+        self.create = (payload) =>{
+            let newUUID = this.newUUID()
+            let map
+            this.idToCollectionMap.set(newUUID, self.collection)
+
+            Object.keys(payload).forEach(payloadkey=>{
+                switch(this.keyToTypeMap.get(`${self.collection}To${payloadkey}`)){
+                    case 'string':                        
+                    case '*':
+                        map = this.map.get(`${self.collection}To${payloadkey}`)
+                        map.set(newUUID, payload[payloadkey])
+                        break;
+                    case 'array':
+                    case '*array':
+                        map = this.map.get(`${self.collection}To${payloadkey}`)
+                        map.set(newUUID, [])
+                        map = map.get(newUUID)
+                        payload[payloadkey].forEach(data=>{
+                            map.push(data)
+                        })
+                        break;
+                    case 'object':
+                        Object.keys(payload[payloadkey]).forEach(_=>{
+                            map = this.map.get(`${self.collection}To${payloadkey}To${_}`)
+                            map.set(newUUID, payload[payloadkey][_])
+                        })
+                        break;
+
+                }
+            })
+            return newUUID
+        }
         return self            
     }
     Reference = (id) =>{
@@ -166,32 +211,32 @@ class Realm{
 }
 let db1 = new Realm('ah1')
 
+
+db1.define('ll',{
+    data: 'string',   
+})
 db1.define('pool',{
+    master: '*',
     users: '*array'
 })
-db1.define('ll',{
-    data: 'string',
-})
-
-
 let ll = db1.collection('ll')
+let pool=db1.collection('pool')
 l1 = ll.create({
-    data: 1,
+    data: '[1,2,3,4,5]',
 })
 l2 = ll.create({
-    data: 2,
+    data: '23',
 })
+
 l3 = ll.create({
-    data:3,
+    data: '34534',
 })
-l4 = ll.create({
-    data:4,
+p1 = pool.create({
+    master: l1,
+    users: [l1,l2,l3]    
 })
-let pool = db1.collection('pool')
-let p1 = pool.create({
-    users:[l1, l2, l3, l4]    
+users = pool.id(p1).users()
+users.forEach(u=>{
+    console.log(u.data())
 })
-let data = pool.id(p1).select('users')
-data.forEach(_=>{
-    console.log(_.select('data'))
-})  
+// console.log(db1)
