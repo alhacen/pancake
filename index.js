@@ -40,8 +40,7 @@ class Realm{
             }
         })
     }
-    _resolvePointer = (pointersIdArray) =>{
-        
+    _resolvePointer = (pointersIdArray) =>{        
         return  pointersIdArray.map(pointersId=>{
             let newSelfObj={}
             let pointersCollection = this.idToCollectionMap.get(pointersId)
@@ -52,7 +51,7 @@ class Realm{
         })
     }
     _resolvePropsHelper = (id, key) =>{
-        let pointersId,newSelfObj, pointersCollection, pointersIdArray, res
+        let pointersIdArray
         if(this.map.has(key)){                    
             switch(this.keyToTypeMap.get(key)){
                 case 'string':
@@ -71,17 +70,34 @@ class Realm{
             }
         }
     }
+    _saveHandler = (id, key, payload) =>{
+        // this.map.get(key).get(id).set()
+        Object.keys(payload).forEach(payloadKey=>{
+            // console.log(this.map.get(key+"To"+payloadKey).get())
+            this.map.get(key+"To"+payloadKey).set(id,payload[payloadKey])
+        })
+    }
     _resolveProps = (selfObj, collection,id, key) =>{
-
         if(!key)
             key = collection
         let props = this.keyToPropMap.get(key)
+        let tmpThis = this
         props.map(prop=>{
-            selfObj[prop] = () =>{
-                return this._resolvePropsHelper(id, key+"To"+prop)
+            Object.defineProperty(selfObj, prop, {
+                get() { 
+                    return tmpThis._resolvePropsHelper(id, key+"To"+prop)
+                },
+                set(payload){
+                    // console.log(key+"To"+prop)//.set(id,payload)
+                    tmpThis.map.get(key+"To"+prop).set(id,payload)
+                },
+               enumerable: true,
+            })
+            selfObj.save = (payload) =>{
+                this._saveHandler(id, key, payload)
             }
         })
-
+        
     }
     collection = (collection) =>{
         let self ={}
@@ -202,18 +218,13 @@ class Realm{
         }
         return self            
     }
-    Reference = (id) =>{
-        return {
-            auth: this.pointerAuth,
-            id: id
-        }
-    }
 }
 let db1 = new Realm('ah1')
 
 
 db1.define('ll',{
     data: 'string',   
+    next: '*'
 })
 db1.define('pool',{
     master: '*',
@@ -222,7 +233,7 @@ db1.define('pool',{
 let ll = db1.collection('ll')
 let pool=db1.collection('pool')
 l1 = ll.create({
-    data: '[1,2,3,4,5]',
+    data: 'hassan',
 })
 l2 = ll.create({
     data: '23',
@@ -231,12 +242,8 @@ l2 = ll.create({
 l3 = ll.create({
     data: '34534',
 })
-p1 = pool.create({
-    master: l1,
-    users: [l1,l2,l3]    
-})
-users = pool.id(p1).users()
-users.forEach(u=>{
-    console.log(u.data())
-})
-// console.log(db1)
+l = ll.id(l1)
+l.next = l2
+l.next.next=l3
+
+console.log(l.next.next.data)
