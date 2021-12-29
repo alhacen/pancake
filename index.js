@@ -46,6 +46,8 @@ class Realm{
             let pointersCollection = this.idToCollectionMap.get(pointersId)
             if(!pointersId)
                 return pointersId
+            if(!pointersCollection)
+                return pointersCollection
             this._resolveProps(newSelfObj, pointersCollection, pointersId)
             return newSelfObj
         })
@@ -63,8 +65,24 @@ class Realm{
                     pointersIdArray = this.map.get(key).get(id)
                     if(!Array.isArray(pointersIdArray))
                         return this._resolvePointer([pointersIdArray])[0]
-                    else 
-                        return this._resolvePointer(pointersIdArray)
+                    else {
+                        let res =  this._resolvePointer(pointersIdArray)
+                        return new Proxy(res,{
+                            get:(target, prop)=>{            
+                                let actions={
+                                    add: (...args) =>{
+                                        pointersIdArray.push(...args)
+                                    }
+                                }
+                                if(Object.keys(actions).includes(prop)){
+                                    return actions[prop]
+                                }else{
+                                    return target[prop]
+                                }
+                            }
+                        })
+                        
+                    }
                     
                     break;
             }
@@ -80,6 +98,7 @@ class Realm{
     _resolveProps = (selfObj, collection,id, key) =>{
         if(!key)
             key = collection
+
         let props = this.keyToPropMap.get(key)
         let tmpThis = this
         props.map(prop=>{
@@ -88,7 +107,6 @@ class Realm{
                     return tmpThis._resolvePropsHelper(id, key+"To"+prop)
                 },
                 set(payload){
-                    // console.log(key+"To"+prop)//.set(id,payload)
                     tmpThis.map.get(key+"To"+prop).set(id,payload)
                 },
                enumerable: true,
@@ -99,10 +117,13 @@ class Realm{
         })
         
     }
+    has = (id) => this.idToCollectionMap.has(id)
     collection = (collection) =>{
         let self ={}
         self.collection = collection
-        
+
+        self.has = (id) => this.idToCollectionMap.get(id) === self.collection
+
         self.id = (id) =>{
             let self2 = {}
             this._resolveProps(self2, collection, id)
@@ -183,13 +204,16 @@ class Realm{
             }
             return self2
         }
-
-        self.create = (payload) =>{
-            let newUUID = this.newUUID()
+        
+        self.create = (payload,key) =>{
+            let newUUID
+            if(!key)
+                newUUID = this.newUUID()
+            else newUUID = key
             let map
             this.idToCollectionMap.set(newUUID, self.collection)
 
-            Object.keys(payload).forEach(payloadkey=>{
+            Object.keys(payload).forEach(payloadkey=>{//
                 switch(this.keyToTypeMap.get(`${self.collection}To${payloadkey}`)){
                     case 'string':                        
                     case '*':
@@ -218,32 +242,41 @@ class Realm{
         }
         return self            
     }
+    delete = (id) =>{
+        let collection = this.idToCollectionMap.get(id)
+        this.keyToPropMap.get(collection).forEach(prop=>{
+            this.map.get(`${collection}To${prop}`).delete(id)
+        })
+        this.idToCollectionMap.delete(id)
+    }
 }
 let db1 = new Realm('ah1')
 
 
-db1.define('ll',{
-    data: 'string',   
-    next: '*'
+db1.define('users',{
+    ws: 'string',
+    pool: '*' 
 })
-db1.define('pool',{
-    master: '*',
+db1.define('pools',{
+    master: '*',   
     users: '*array'
 })
-let ll = db1.collection('ll')
-let pool=db1.collection('pool')
-l1 = ll.create({
-    data: 'hassan',
+users = db1.collection('users')
+pools = db1.collection('pools')
+u1 = users.create({
+    ws:'123',
+    pool:null
 })
-l2 = ll.create({
-    data: '23',
+u2 = users.create({
+    ws:'34434',
+    pool:null
 })
-
-l3 = ll.create({
-    data: '34534',
+p1 = pools.create({
+    master: u1,
+    users: [u1]
 })
-l = ll.id(l1)
-l.next = l2
-l.next.next=l3
-
-console.log(l.next.next.data)
+p = pools.id(p1)
+p.users.add(u2)
+console.log(p.users)
+// console.log(p.users)
+// console.log(db1)
